@@ -55,25 +55,47 @@ enum usbi_log_level {
 };
 
 #ifdef ENABLE_LOGGING
-#define _usbi_log(level, fmt...) usbi_log(level, __FUNCTION__, fmt)
+#define _usbi_log(level, ...) usbi_log(level, __FUNCTION__, __VA_ARGS__)
 #else
-#define _usbi_log(level, fmt...)
+#define _usbi_log(level, ...)
 #endif
 
 #ifdef ENABLE_DEBUG_LOGGING
-#define usbi_dbg(fmt...) _usbi_log(LOG_LEVEL_DEBUG, fmt)
+#define usbi_dbg(...) _usbi_log(LOG_LEVEL_DEBUG, __VA_ARGS__)
 #else
-#define usbi_dbg(fmt...)
+#define usbi_dbg(...)
 #endif
 
-#define usbi_info(fmt...) _usbi_log(LOG_LEVEL_INFO, fmt)
-#define usbi_warn(fmt...) _usbi_log(LOG_LEVEL_WARNING, fmt)
-#define usbi_err(fmt...) _usbi_log(LOG_LEVEL_ERROR, fmt)
+#define usbi_info(...) _usbi_log(LOG_LEVEL_INFO, __VA_ARGS__)
+#define usbi_warn(...) _usbi_log(LOG_LEVEL_WARNING, __VA_ARGS__)
+#define usbi_err(...) _usbi_log(LOG_LEVEL_ERROR, __VA_ARGS__)
 
-API_EXPORTED struct usb_bus *usb_busses = NULL;
+DEFAULT_VISIBILITY struct usb_bus *usb_busses = NULL;
 
 #define compat_err(e) -(errno=libusb_to_errno(e))
 
+#ifdef _MSC_VER
+#ifdef LIBUSB_1_0_SONAME
+BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpReserved)
+{
+	switch( fdwReason )
+	{
+		case DLL_PROCESS_ATTACH:
+			libusb_dl_init ();
+			break;
+
+		case DLL_PROCESS_DETACH:
+			if (ctx) {
+				libusb_exit (ctx);
+				ctx = NULL;
+			}
+			libusb_dl_exit ();
+			break;
+	}
+	return TRUE;
+}
+#endif
+#else
 #ifdef LIBUSB_1_0_SONAME
 static void __attribute__ ((constructor)) _usb_init (void)
 {
@@ -91,6 +113,7 @@ static void __attribute__ ((destructor)) _usb_exit (void)
 	libusb_dl_exit ();
 #endif
 }
+#endif
 
 static int libusb_to_errno(int result)
 {
@@ -110,9 +133,9 @@ static int libusb_to_errno(int result)
 	case LIBUSB_ERROR_BUSY:
 		return EBUSY;
 	case LIBUSB_ERROR_TIMEOUT:
-		return ETIMEDOUT;
+		return EIO;
 	case LIBUSB_ERROR_OVERFLOW:
-		return EOVERFLOW;
+		return EINVAL;
 	case LIBUSB_ERROR_PIPE:
 		return EPIPE;
 	case LIBUSB_ERROR_INTERRUPTED:
@@ -169,7 +192,7 @@ static void usbi_log(enum usbi_log_level level, const char *function,
 	fprintf(stream, "\n");
 }
 
-API_EXPORTED void usb_init(void)
+void API_EXPORTED usb_init(void)
 {
 	int r;
 	usbi_dbg("");
@@ -187,7 +210,7 @@ API_EXPORTED void usb_init(void)
 	}
 }
 
-API_EXPORTED void usb_set_debug(int level)
+void API_EXPORTED usb_set_debug(int level)
 {
 	usb_debug = level;
 
@@ -196,7 +219,7 @@ API_EXPORTED void usb_set_debug(int level)
 		libusb_set_debug(ctx, 3);
 }
 
-API_EXPORTED char *usb_strerror(void)
+DEFAULT_VISIBILITY char * LIBUSB_CALL usb_strerror(void)
 {
 	return strerror(errno);
 }
@@ -270,7 +293,7 @@ err:
 	return -ENOMEM;
 }
 
-API_EXPORTED int usb_find_busses(void)
+int API_EXPORTED usb_find_busses(void)
 {
 	struct usb_bus *new_busses = NULL;
 	struct usb_bus *bus;
@@ -281,7 +304,7 @@ API_EXPORTED int usb_find_busses(void)
 	 * this with libusb-0.1, so trap that situation here */
 	if (!ctx)
 		return 0;
-	
+
 	usbi_dbg("");
 	r = find_busses(&new_busses);
 	if (r < 0) {
@@ -595,7 +618,7 @@ static void free_device(struct usb_device *dev)
 	free(dev);
 }
 
-API_EXPORTED int usb_find_devices(void)
+int API_EXPORTED usb_find_devices(void)
 {
 	struct usb_bus *bus;
 	libusb_device **dev_list;
@@ -676,12 +699,12 @@ API_EXPORTED int usb_find_devices(void)
 	return changes;
 }
 
-API_EXPORTED struct usb_bus *usb_get_busses(void)
+DEFAULT_VISIBILITY struct usb_bus * LIBUSB_CALL usb_get_busses(void)
 {
 	return usb_busses;
 }
 
-API_EXPORTED usb_dev_handle *usb_open(struct usb_device *dev)
+DEFAULT_VISIBILITY usb_dev_handle * LIBUSB_CALL usb_open(struct usb_device *dev)
 {
 	int r;
 	usbi_dbg("");
@@ -707,7 +730,7 @@ API_EXPORTED usb_dev_handle *usb_open(struct usb_device *dev)
 	return udev;
 }
 
-API_EXPORTED int usb_close(usb_dev_handle *dev)
+int API_EXPORTED usb_close(usb_dev_handle *dev)
 {
 	usbi_dbg("");
 	libusb_close(dev->handle);
@@ -715,18 +738,18 @@ API_EXPORTED int usb_close(usb_dev_handle *dev)
 	return 0;
 }
 
-API_EXPORTED struct usb_device *usb_device(usb_dev_handle *dev)
+DEFAULT_VISIBILITY struct usb_device * LIBUSB_CALL usb_device(usb_dev_handle *dev)
 {
 	return dev->device;
 }
 
-API_EXPORTED int usb_set_configuration(usb_dev_handle *dev, int configuration)
+int API_EXPORTED usb_set_configuration(usb_dev_handle *dev, int configuration)
 {
 	usbi_dbg("configuration %d", configuration);
 	return compat_err(libusb_set_configuration(dev->handle, configuration));
 }
 
-API_EXPORTED int usb_claim_interface(usb_dev_handle *dev, int interface)
+int API_EXPORTED usb_claim_interface(usb_dev_handle *dev, int interface)
 {
 	int r;
 	usbi_dbg("interface %d", interface);
@@ -740,7 +763,7 @@ API_EXPORTED int usb_claim_interface(usb_dev_handle *dev, int interface)
 	return compat_err(r);
 }
 
-API_EXPORTED int usb_release_interface(usb_dev_handle *dev, int interface)
+int API_EXPORTED usb_release_interface(usb_dev_handle *dev, int interface)
 {
 	int r;
 	usbi_dbg("interface %d", interface);
@@ -752,28 +775,28 @@ API_EXPORTED int usb_release_interface(usb_dev_handle *dev, int interface)
 	return compat_err(r);
 }
 
-API_EXPORTED int usb_set_altinterface(usb_dev_handle *dev, int alternate)
+int API_EXPORTED usb_set_altinterface(usb_dev_handle *dev, int alternate)
 {
 	usbi_dbg("alternate %d", alternate);
 	if (dev->last_claimed_interface < 0)
 		return -(errno=EINVAL);
-	
+
 	return compat_err(libusb_set_interface_alt_setting(dev->handle,
 		dev->last_claimed_interface, alternate));
 }
 
-API_EXPORTED int usb_resetep(usb_dev_handle *dev, unsigned int ep)
+int API_EXPORTED usb_resetep(usb_dev_handle *dev, unsigned int ep)
 {
 	return compat_err(usb_clear_halt(dev, ep));
 }
 
-API_EXPORTED int usb_clear_halt(usb_dev_handle *dev, unsigned int ep)
+int API_EXPORTED usb_clear_halt(usb_dev_handle *dev, unsigned int ep)
 {
 	usbi_dbg("endpoint %x", ep);
 	return compat_err(libusb_clear_halt(dev->handle, ep & 0xff));
 }
 
-API_EXPORTED int usb_reset(usb_dev_handle *dev)
+int API_EXPORTED usb_reset(usb_dev_handle *dev)
 {
 	usbi_dbg("");
 	return compat_err(libusb_reset_device(dev->handle));
@@ -796,7 +819,7 @@ static int usb_bulk_io(usb_dev_handle *dev, int ep, char *bytes,
 	return compat_err(r);
 }
 
-API_EXPORTED int usb_bulk_read(usb_dev_handle *dev, int ep, char *bytes,
+int API_EXPORTED usb_bulk_read(usb_dev_handle *dev, int ep, char *bytes,
 	int size, int timeout)
 {
 	if (!(ep & USB_ENDPOINT_IN)) {
@@ -810,7 +833,7 @@ API_EXPORTED int usb_bulk_read(usb_dev_handle *dev, int ep, char *bytes,
 	return usb_bulk_io(dev, ep, bytes, size, timeout);
 }
 
-API_EXPORTED int usb_bulk_write(usb_dev_handle *dev, int ep, const char *bytes,
+int API_EXPORTED usb_bulk_write(usb_dev_handle *dev, int ep, const char *bytes,
 	int size, int timeout)
 {
 	if (ep & USB_ENDPOINT_IN) {
@@ -841,7 +864,7 @@ static int usb_interrupt_io(usb_dev_handle *dev, int ep, char *bytes,
 	return compat_err(r);
 }
 
-API_EXPORTED int usb_interrupt_read(usb_dev_handle *dev, int ep, char *bytes,
+int API_EXPORTED usb_interrupt_read(usb_dev_handle *dev, int ep, char *bytes,
 	int size, int timeout)
 {
 	if (!(ep & USB_ENDPOINT_IN)) {
@@ -854,7 +877,7 @@ API_EXPORTED int usb_interrupt_read(usb_dev_handle *dev, int ep, char *bytes,
 	return usb_interrupt_io(dev, ep, bytes, size, timeout);
 }
 
-API_EXPORTED int usb_interrupt_write(usb_dev_handle *dev, int ep, const char *bytes,
+int API_EXPORTED usb_interrupt_write(usb_dev_handle *dev, int ep, const char *bytes,
 	int size, int timeout)
 {
 	if (ep & USB_ENDPOINT_IN) {
@@ -868,7 +891,7 @@ API_EXPORTED int usb_interrupt_write(usb_dev_handle *dev, int ep, const char *by
 	return usb_interrupt_io(dev, ep, (char *)bytes, size, timeout);
 }
 
-API_EXPORTED int usb_control_msg(usb_dev_handle *dev, int bmRequestType,
+int API_EXPORTED usb_control_msg(usb_dev_handle *dev, int bmRequestType,
 	int bRequest, int wValue, int wIndex, char *bytes, int size, int timeout)
 {
 	int r;
@@ -885,7 +908,7 @@ API_EXPORTED int usb_control_msg(usb_dev_handle *dev, int bmRequestType,
 	return compat_err(r);
 }
 
-API_EXPORTED int usb_get_string(usb_dev_handle *dev, int desc_index, int langid,
+int API_EXPORTED usb_get_string(usb_dev_handle *dev, int desc_index, int langid,
 	char *buf, size_t buflen)
 {
 	int r;
@@ -896,7 +919,7 @@ API_EXPORTED int usb_get_string(usb_dev_handle *dev, int desc_index, int langid,
 	return compat_err(r);
 }
 
-API_EXPORTED int usb_get_string_simple(usb_dev_handle *dev, int desc_index,
+int API_EXPORTED usb_get_string_simple(usb_dev_handle *dev, int desc_index,
 	char *buf, size_t buflen)
 {
 	int r;
@@ -907,7 +930,7 @@ API_EXPORTED int usb_get_string_simple(usb_dev_handle *dev, int desc_index,
 	return compat_err(r);
 }
 
-API_EXPORTED int usb_get_descriptor(usb_dev_handle *dev, unsigned char type,
+int API_EXPORTED usb_get_descriptor(usb_dev_handle *dev, unsigned char type,
 	unsigned char desc_index, void *buf, int size)
 {
 	int r;
@@ -917,7 +940,7 @@ API_EXPORTED int usb_get_descriptor(usb_dev_handle *dev, unsigned char type,
 	return compat_err(r);
 }
 
-API_EXPORTED int usb_get_descriptor_by_endpoint(usb_dev_handle *dev, int ep,
+int API_EXPORTED usb_get_descriptor_by_endpoint(usb_dev_handle *dev, int ep,
 	unsigned char type, unsigned char desc_index, void *buf, int size)
 {
 	/* this function doesn't make much sense - the specs don't talk about
@@ -932,7 +955,7 @@ API_EXPORTED int usb_get_descriptor_by_endpoint(usb_dev_handle *dev, int ep,
 	return compat_err(r);
 }
 
-API_EXPORTED int usb_get_driver_np(usb_dev_handle *dev, int interface,
+int API_EXPORTED usb_get_driver_np(usb_dev_handle *dev, int interface,
 	char *name, unsigned int namelen)
 {
 	int r = libusb_kernel_driver_active(dev->handle, interface);
@@ -941,20 +964,20 @@ API_EXPORTED int usb_get_driver_np(usb_dev_handle *dev, int interface,
 		snprintf(name, namelen, "dummy");
 		return 0;
 	} else if (r == 0) {
-		return -(errno=ENODATA);
+		return -(errno=EINVAL);
 	} else {
 		return compat_err(r);
 	}
 }
 
-API_EXPORTED int usb_detach_kernel_driver_np(usb_dev_handle *dev, int interface)
+int API_EXPORTED usb_detach_kernel_driver_np(usb_dev_handle *dev, int interface)
 {
 	int r = compat_err(libusb_detach_kernel_driver(dev->handle, interface));
 	switch (r) {
 	case LIBUSB_SUCCESS:
 		return 0;
 	case LIBUSB_ERROR_NOT_FOUND:
-		return -ENODATA;
+		return -EINVAL;
 	case LIBUSB_ERROR_INVALID_PARAM:
 		return -EINVAL;
 	case LIBUSB_ERROR_NO_DEVICE:

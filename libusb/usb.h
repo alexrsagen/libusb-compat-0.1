@@ -26,16 +26,22 @@
 #ifndef USB_H
 #define USB_H
 
-#include <unistd.h>
-#include <stdlib.h>
-#include <stdint.h>
-#include <limits.h>
-
-#include <dirent.h>
-
-#ifdef interface
-#undef interface
+#ifdef _MSC_VER
+/* on MS environments, the inline keyword is available in C++ only */
+#if !defined(__cplusplus)
+#define inline __inline
 #endif
+/* ssize_t is also not available (copy/paste from MinGW) */
+#ifndef _SSIZE_T_DEFINED
+#define _SSIZE_T_DEFINED
+#undef ssize_t
+#ifdef _WIN64
+  typedef __int64 ssize_t;
+#else
+  typedef int ssize_t;
+#endif /* _WIN64 */
+#endif /* _SSIZE_T_DEFINED */
+#endif /* _MSC_VER */
 
 /* stdint.h is not available on older MSVC */
 #if defined(_MSC_VER) && (_MSC_VER < 1600) && (!defined(_STDINT)) && (!defined(_STDINT_H))
@@ -45,6 +51,83 @@ typedef unsigned __int32  uint32_t;
 #else
 #include <stdint.h>
 #endif
+
+/* On linux PATH_MAX is defined in linux/limits.h. */
+#if defined(__linux__)
+#include <linux/limits.h>
+#endif
+
+#if !defined(_WIN32_WCE)
+#include <sys/types.h>
+#endif
+
+#if defined(__linux__) || defined(__APPLE__) || defined(__CYGWIN__)
+#include <sys/time.h>
+#include <unistd.h>
+#include <dirent.h>
+#endif
+
+#include <stdlib.h>
+#include <stdint.h>
+#include <limits.h>
+
+
+/* 'interface' might be defined as a macro on Windows, so we need to
+ * undefine it so as not to break the current libusb-compat API, because
+ * libusb_config_descriptor has an 'interface' member
+ * As this can be problematic if you include windows.h after libusb.h
+ * in your sources, we force windows.h to be included first. */
+#if defined(_WIN32) || defined(__CYGWIN__) || defined(_WIN32_WCE)
+	#include <windows.h>
+	#if defined(interface)
+		#undef interface
+	#endif
+	#if !defined(__CYGWIN__)
+		#include <winsock.h>
+	#endif
+	#ifndef PATH_MAX
+		#define PATH_MAX MAX_PATH
+	#endif
+#endif
+
+/** \def LIBUSB_CALL
+ * \ingroup misc
+ * libusb-compat's Windows calling convention.
+ *
+ * Under Windows, the selection of available compilers and configurations
+ * means that, unlike other platforms, there is not <em>one true calling
+ * convention</em> (calling convention: the manner in which parameters are
+ * passed to funcions in the generated assembly code).
+ *
+ * Matching the Windows API itself, libusb-compat uses the WINAPI convention (which
+ * translates to the <tt>stdcall</tt> convention) and guarantees that the
+ * library is compiled in this way. The public header file also includes
+ * appropriate annotations so that your own software will use the right
+ * convention, even if another convention is being used by default within
+ * your codebase.
+ *
+ * The one consideration that you must apply in your software is to mark
+ * all functions which you use as libusb-compat callbacks with this LIBUSB_CALL
+ * annotation, so that they too get compiled for the correct calling
+ * convention.
+ *
+ * On non-Windows operating systems, this macro is defined as nothing. This
+ * means that you can apply it to your code without worrying about
+ * cross-platform compatibility.
+ */
+/* LIBUSB_CALL must be defined on both definition and declaration of libusb-compat
+ * functions. You'd think that declaration would be enough, but cygwin will
+ * complain about conflicting types unless both are marked this way.
+ * The placement of this macro is important too; it must appear after the
+ * return type, before the function name. See internal documentation for
+ * API_EXPORTED.
+ */
+#if defined(_WIN32) || defined(__CYGWIN__) || defined(_WIN32_WCE)
+#define LIBUSB_CALL WINAPI
+#else
+#define LIBUSB_CALL
+#endif
+
 
 /*
  * USB spec information
@@ -299,52 +382,52 @@ extern "C" {
 /* Function prototypes */
 
 /* usb.c */
-usb_dev_handle *usb_open(struct usb_device *dev);
-int usb_close(usb_dev_handle *dev);
-int usb_get_string(usb_dev_handle *dev, int index, int langid, char *buf,
+usb_dev_handle * LIBUSB_CALL usb_open(struct usb_device *dev);
+int LIBUSB_CALL usb_close(usb_dev_handle *dev);
+int LIBUSB_CALL usb_get_string(usb_dev_handle *dev, int index, int langid, char *buf,
 	size_t buflen);
-int usb_get_string_simple(usb_dev_handle *dev, int index, char *buf,
+int LIBUSB_CALL usb_get_string_simple(usb_dev_handle *dev, int index, char *buf,
 	size_t buflen);
 
 /* descriptors.c */
-int usb_get_descriptor_by_endpoint(usb_dev_handle *udev, int ep,
+int LIBUSB_CALL usb_get_descriptor_by_endpoint(usb_dev_handle *udev, int ep,
 	unsigned char type, unsigned char index, void *buf, int size);
-int usb_get_descriptor(usb_dev_handle *udev, unsigned char type,
+int LIBUSB_CALL usb_get_descriptor(usb_dev_handle *udev, unsigned char type,
 	unsigned char index, void *buf, int size);
 
 /* <arch>.c */
-int usb_bulk_write(usb_dev_handle *dev, int ep, const char *bytes, int size,
+int LIBUSB_CALL usb_bulk_write(usb_dev_handle *dev, int ep, const char *bytes, int size,
 	int timeout);
-int usb_bulk_read(usb_dev_handle *dev, int ep, char *bytes, int size,
+int LIBUSB_CALL usb_bulk_read(usb_dev_handle *dev, int ep, char *bytes, int size,
 	int timeout);
-int usb_interrupt_write(usb_dev_handle *dev, int ep, const char *bytes,
+int LIBUSB_CALL usb_interrupt_write(usb_dev_handle *dev, int ep, const char *bytes,
 	int size, int timeout);
-int usb_interrupt_read(usb_dev_handle *dev, int ep, char *bytes, int size,
+int LIBUSB_CALL usb_interrupt_read(usb_dev_handle *dev, int ep, char *bytes, int size,
         int timeout);
-int usb_control_msg(usb_dev_handle *dev, int requesttype, int request,
+int LIBUSB_CALL usb_control_msg(usb_dev_handle *dev, int requesttype, int request,
 	int value, int index, char *bytes, int size, int timeout);
-int usb_set_configuration(usb_dev_handle *dev, int configuration);
-int usb_claim_interface(usb_dev_handle *dev, int interface);
-int usb_release_interface(usb_dev_handle *dev, int interface);
-int usb_set_altinterface(usb_dev_handle *dev, int alternate);
-int usb_resetep(usb_dev_handle *dev, unsigned int ep);
-int usb_clear_halt(usb_dev_handle *dev, unsigned int ep);
-int usb_reset(usb_dev_handle *dev);
+int LIBUSB_CALL usb_set_configuration(usb_dev_handle *dev, int configuration);
+int LIBUSB_CALL usb_claim_interface(usb_dev_handle *dev, int interface);
+int LIBUSB_CALL usb_release_interface(usb_dev_handle *dev, int interface);
+int LIBUSB_CALL usb_set_altinterface(usb_dev_handle *dev, int alternate);
+int LIBUSB_CALL usb_resetep(usb_dev_handle *dev, unsigned int ep);
+int LIBUSB_CALL usb_clear_halt(usb_dev_handle *dev, unsigned int ep);
+int LIBUSB_CALL usb_reset(usb_dev_handle *dev);
 
 #define LIBUSB_HAS_GET_DRIVER_NP 1
-int usb_get_driver_np(usb_dev_handle *dev, int interface, char *name,
+int LIBUSB_CALL usb_get_driver_np(usb_dev_handle *dev, int interface, char *name,
 	unsigned int namelen);
 #define LIBUSB_HAS_DETACH_KERNEL_DRIVER_NP 1
-int usb_detach_kernel_driver_np(usb_dev_handle *dev, int interface);
+int LIBUSB_CALL usb_detach_kernel_driver_np(usb_dev_handle *dev, int interface);
 
-char *usb_strerror(void);
+char * LIBUSB_CALL usb_strerror(void);
 
-void usb_init(void);
-void usb_set_debug(int level);
-int usb_find_busses(void);
-int usb_find_devices(void);
-struct usb_device *usb_device(usb_dev_handle *dev);
-struct usb_bus *usb_get_busses(void);
+void LIBUSB_CALL usb_init(void);
+void LIBUSB_CALL usb_set_debug(int level);
+int LIBUSB_CALL usb_find_busses(void);
+int LIBUSB_CALL usb_find_devices(void);
+struct usb_device * LIBUSB_CALL usb_device(usb_dev_handle *dev);
+struct usb_bus * LIBUSB_CALL usb_get_busses(void);
 
 #ifdef __cplusplus
 }
