@@ -13,7 +13,7 @@ jobs:
         with:
           msystem: MINGW64
           update: true
-          install: git base-devel autotools libtool mingw-w64-x86_64-cc mingw-w64-x86_64-libusb mingw-w64-x86_64-autotools mingw-w64-x86_64-libtool
+          install: git base-devel autotools autoconf-wrapper libtool mingw-w64-x86_64-cc mingw-w64-x86_64-libusb mingw-w64-x86_64-autotools mingw-w64-x86_64-libtool
       - name: build
         shell: bash
         run: ./autogen.sh --enable-examples-build && make -j4
